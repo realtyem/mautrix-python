@@ -26,6 +26,7 @@ from mautrix.types import (
     FilterID,
     GenericEvent,
     MessageEvent,
+    PresenceEvent,
     PresenceState,
     SerializerError,
     StateEvent,
@@ -325,6 +326,10 @@ class Syncer(ABC):
         for raw_event in data.get("to_device", {}).get("events", []):
             tasks += self.dispatch_event(
                 self._try_deserialize(ToDeviceEvent, raw_event), source=SyncStream.TO_DEVICE
+            )
+        for raw_event in data.get("presence", {}).get("events", []):
+            tasks += self.dispatch_event(
+                self._try_deserialize(PresenceEvent, raw_event), source=SyncStream.EPHEMERAL
             )
 
         rooms = data.get("rooms", {})
