@@ -356,8 +356,8 @@ class EventMethods(BaseClientAPI):
         )
         try:
             return PaginatedMessages(
-                content["start"],
-                content["end"],
+                content.get("start", None),
+                content.get("end", None),
                 [Event.deserialize(event) for event in content["chunk"]],
             )
         except KeyError:
