@@ -1,3 +1,41 @@
+## v0.20.8 (unreleased)
+
+* *(bridge)* Added support for [MSC4190] (thanks to [@surakin] in [#175]).
+* *(appservice)* Renamed `push_ephemeral` in generated registrations to
+  `receive_ephemeral` to match the accepted version of [MSC2409].
+
+[MSC4190]: https://github.com/matrix-org/matrix-spec-proposals/pull/2781
+[@surakin]: https://github.com/surakin
+[#175]: https://github.com/mautrix/python/pull/175
+
+## v0.20.7 (2025-01-03)
+
+* *(types)* Removed support for generating reply fallbacks to implement
+  [MSC2781]. Stripping fallbacks is still supported.
+
+[MSC2781]: https://github.com/matrix-org/matrix-spec-proposals/pull/2781
+
+## v0.20.6 (2024-07-12)
+
+* *(bridge)* Added `/register` call if `/versions` fails with `M_FORBIDDEN`.
+
+## v0.20.5 (2024-07-09)
+
+**Note:** The `bridge` module is deprecated as all bridges are being rewritten
+in Go. See <https://mau.fi/blog/2024-h1-mautrix-updates/> for more info.
+
+* *(client)* Added support for authenticated media downloads.
+* *(bridge)* Stopped using cached homeserver URLs for double puppeting if one
+  is set in the config file.
+* *(crypto)* Fixed error when checking OTK counts before uploading new keys.
+* *(types)* Added MSC2530 (captions) fields to `MediaMessageEventContent`.
+
+## v0.20.4 (2024-01-09)
+
+* Dropped Python 3.9 support.
+* *(client)* Changed media download methods to log requests and to raise
+  exceptions on non-successful status codes.
+
 ## v0.20.3 (2023-11-10)
 
 * *(client)* Deprecated MSC2716 methods and added new Beeper-specific batch

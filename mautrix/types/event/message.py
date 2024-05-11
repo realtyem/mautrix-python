@@ -119,7 +119,7 @@ class BaseMessageEventContentFuncs:
                 thread_parent.content.get_thread_parent() or self.relates_to.event_id
             )
         if not disable_reply_fallback:
-            self.set_reply(last_event_in_thread or thread_parent, disable_fallback=True, **kwargs)
+            self.set_reply(last_event_in_thread or thread_parent, **kwargs)
             self.relates_to.is_falling_back = True
 
     def set_edit(self, edits: Union[EventID, "MessageEvent"]) -> None:
@@ -272,33 +272,6 @@ class LocationInfo(SerializableAttrs):
 
 
 @dataclass
-class MediaMessageEventContent(BaseMessageEventContent, SerializableAttrs):
-    """The content of a media message event (m.image, m.audio, m.video, m.file)"""
-
-    url: Optional[ContentURI] = None
-    info: Optional[MediaInfo] = None
-    file: Optional[EncryptedFile] = None
-
-    @staticmethod
-    @deserializer(MediaInfo)
-    @deserializer(Optional[MediaInfo])
-    def deserialize_info(data: JSON) -> MediaInfo:
-        if not isinstance(data, dict):
-            return Obj()
-        msgtype = data.pop("__mautrix_msgtype", None)
-        if msgtype == "m.image" or msgtype == "m.sticker":
-            return ImageInfo.deserialize(data)
-        elif msgtype == "m.video":
-            return VideoInfo.deserialize(data)
-        elif msgtype == "m.audio":
-            return AudioInfo.deserialize(data)
-        elif msgtype == "m.file":
-            return FileInfo.deserialize(data)
-        else:
-            return Obj(**data)
-
-
-@dataclass
 class LocationMessageEventContent(BaseMessageEventContent, SerializableAttrs):
     geo_uri: str = None
     info: LocationInfo = None
@@ -313,25 +286,6 @@ class TextMessageEventContent(BaseMessageEventContent, SerializableAttrs):
 
     format: Format = None
     formatted_body: str = None
-
-    def set_reply(
-        self,
-        reply_to: Union["MessageEvent", EventID],
-        *,
-        displayname: Optional[str] = None,
-        disable_fallback: bool = False,
-    ) -> None:
-        super().set_reply(reply_to)
-        if isinstance(reply_to, str):
-            return
-        if isinstance(reply_to, MessageEvent) and not disable_fallback:
-            self.ensure_has_html()
-            if isinstance(reply_to.content, TextMessageEventContent):
-                reply_to.content.trim_reply_fallback()
-            self.formatted_body = (
-                reply_to.make_reply_fallback_html(displayname) + self.formatted_body
-            )
-            self.body = reply_to.make_reply_fallback_text(displayname) + self.body
 
     def ensure_has_html(self) -> None:
         if not self.formatted_body or self.format != Format.HTML:
@@ -362,6 +316,34 @@ class TextMessageEventContent(BaseMessageEventContent, SerializableAttrs):
     def _trim_reply_fallback_html(self) -> None:
         if self.formatted_body and self.format == Format.HTML:
             self.formatted_body = html_reply_fallback_regex.sub("", self.formatted_body)
+
+
+@dataclass
+class MediaMessageEventContent(TextMessageEventContent, SerializableAttrs):
+    """The content of a media message event (m.image, m.audio, m.video, m.file)"""
+
+    url: Optional[ContentURI] = None
+    info: Optional[MediaInfo] = None
+    file: Optional[EncryptedFile] = None
+    filename: Optional[str] = None
+
+    @staticmethod
+    @deserializer(MediaInfo)
+    @deserializer(Optional[MediaInfo])
+    def deserialize_info(data: JSON) -> MediaInfo:
+        if not isinstance(data, dict):
+            return Obj()
+        msgtype = data.pop("__mautrix_msgtype", None)
+        if msgtype == "m.image" or msgtype == "m.sticker":
+            return ImageInfo.deserialize(data)
+        elif msgtype == "m.video":
+            return VideoInfo.deserialize(data)
+        elif msgtype == "m.audio":
+            return AudioInfo.deserialize(data)
+        elif msgtype == "m.file":
+            return FileInfo.deserialize(data)
+        else:
+            return Obj(**data)
 
 
 MessageEventContent = Union[
@@ -423,36 +405,3 @@ class MessageEvent(BaseRoomEvent, SerializableAttrs):
             return LocationMessageEventContent.deserialize(data)
         else:
             return Obj(**data)
-
-    def make_reply_fallback_html(self, displayname: Optional[str] = None) -> str:
-        """Generate the HTML fallback for messages replying to this event."""
-        if self.content.msgtype.is_text:
-            body = self.content.formatted_body or escape(self.content.body).replace("\n", "<br/>")
-        else:
-            sent_type = media_reply_fallback_body_map[self.content.msgtype] or "a message"
-            body = f"sent {sent_type}"
-        displayname = escape(displayname) if displayname else self.sender
-        return html_reply_fallback_format.format(
-            room_id=self.room_id,
-            event_id=self.event_id,
-            sender=self.sender,
-            displayname=displayname,
-            content=body,
-        )
-
-    def make_reply_fallback_text(self, displayname: Optional[str] = None) -> str:
-        """Generate the plaintext fallback for messages replying to this event."""
-        if self.content.msgtype.is_text:
-            body = self.content.body
-        else:
-            try:
-                body = media_reply_fallback_body_map[self.content.msgtype]
-            except KeyError:
-                body = "an unknown message type"
-        lines = body.strip().split("\n")
-        first_line, lines = lines[0], lines[1:]
-        fallback_text = f"> <{displayname or self.sender}> {first_line}"
-        for line in lines:
-            fallback_text += f"\n> {line}"
-        fallback_text += "\n\n"
-        return fallback_text

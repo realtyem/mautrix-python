@@ -10,6 +10,8 @@ from contextlib import contextmanager
 import asyncio
 import time
 
+from yarl import URL
+
 from mautrix import __optional_imports__
 from mautrix.api import MediaPath, Method
 from mautrix.errors import MatrixResponseError, make_request_error
@@ -19,6 +21,7 @@ from mautrix.types import (
     MediaRepoConfig,
     MXOpenGraph,
     SerializerError,
+    SpecVersions,
 )
 from mautrix.util import background_task
 from mautrix.util.async_body import async_iter_bytes
@@ -178,12 +181,26 @@ class MediaRepositoryMethods(BaseClientAPI):
         Returns:
             The raw downloaded data.
         """
-        url = self.api.get_download_url(url)
+        authenticated = (await self.versions()).supports(SpecVersions.V111)
+        url = self.api.get_download_url(url, authenticated=authenticated)
         query_params: dict[str, Any] = {"allow_redirect": "true"}
         if timeout_ms is not None:
             query_params["timeout_ms"] = timeout_ms
-        async with self.api.session.get(url, params=query_params) as response:
-            return await response.read()
+        headers: dict[str, str] = {}
+        if authenticated:
+            headers["Authorization"] = f"Bearer {self.api.token}"
+            if self.api.as_user_id:
+                query_params["user_id"] = self.api.as_user_id
+        req_id = self.api.log_download_request(url, query_params)
+        start = time.monotonic()
+        async with self.api.session.get(url, params=query_params, headers=headers) as response:
+            try:
+                response.raise_for_status()
+                return await response.read()
+            finally:
+                self.api.log_download_request_done(
+                    url, req_id, time.monotonic() - start, response.status
+                )
 
     async def download_thumbnail(
         self,
@@ -191,7 +208,7 @@ class MediaRepositoryMethods(BaseClientAPI):
         width: int | None = None,
         height: int | None = None,
         resize_method: Literal["crop", "scale"] = None,
-        allow_remote: bool = True,
+        allow_remote: bool | None = None,
         timeout_ms: int | None = None,
     ):
         """
@@ -215,7 +232,10 @@ class MediaRepositoryMethods(BaseClientAPI):
         Returns:
             The raw downloaded data.
         """
-        url = self.api.get_download_url(url, download_type="thumbnail")
+        authenticated = (await self.versions()).supports(SpecVersions.V111)
+        url = self.api.get_download_url(
+            url, download_type="thumbnail", authenticated=authenticated
+        )
         query_params: dict[str, Any] = {"allow_redirect": "true"}
         if width is not None:
             query_params["width"] = width
@@ -224,11 +244,24 @@ class MediaRepositoryMethods(BaseClientAPI):
         if resize_method is not None:
             query_params["method"] = resize_method
         if allow_remote is not None:
-            query_params["allow_remote"] = allow_remote
+            query_params["allow_remote"] = str(allow_remote).lower()
         if timeout_ms is not None:
             query_params["timeout_ms"] = timeout_ms
-        async with self.api.session.get(url, params=query_params) as response:
-            return await response.read()
+        headers: dict[str, str] = {}
+        if authenticated:
+            headers["Authorization"] = f"Bearer {self.api.token}"
+            if self.api.as_user_id:
+                query_params["user_id"] = self.api.as_user_id
+        req_id = self.api.log_download_request(url, query_params)
+        start = time.monotonic()
+        async with self.api.session.get(url, params=query_params, headers=headers) as response:
+            try:
+                response.raise_for_status()
+                return await response.read()
+            finally:
+                self.api.log_download_request_done(
+                    url, req_id, time.monotonic() - start, response.status
+                )
 
     async def get_url_preview(self, url: str, timestamp: int | None = None) -> MXOpenGraph:
         """
