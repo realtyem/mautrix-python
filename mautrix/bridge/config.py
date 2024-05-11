@@ -143,6 +143,7 @@ class BaseBridgeConfig(BaseFileConfig, BaseValidatableConfig, ABC):
         copy("bridge.encryption.default")
         copy("bridge.encryption.require")
         copy("bridge.encryption.appservice")
+        copy("bridge.encryption.msc4190")
         copy("bridge.encryption.delete_keys.delete_outbound_on_ack")
         copy("bridge.encryption.delete_keys.dont_store_outbound")
         copy("bridge.encryption.delete_keys.ratchet_on_decrypt")
@@ -200,14 +201,18 @@ class BaseBridgeConfig(BaseFileConfig, BaseValidatableConfig, ABC):
                     "regex": re.escape(f"@{username_format}:{homeserver}").replace(regex_ph, ".*"),
                 }
             ],
-            "aliases": [
-                {
-                    "exclusive": True,
-                    "regex": re.escape(f"#{alias_format}:{homeserver}").replace(regex_ph, ".*"),
-                }
-            ]
-            if alias_format
-            else [],
+            "aliases": (
+                [
+                    {
+                        "exclusive": True,
+                        "regex": re.escape(f"#{alias_format}:{homeserver}").replace(
+                            regex_ph, ".*"
+                        ),
+                    }
+                ]
+                if alias_format
+                else []
+            ),
         }
 
     def generate_registration(self) -> None:
@@ -236,4 +241,7 @@ class BaseBridgeConfig(BaseFileConfig, BaseValidatableConfig, ABC):
 
         if self["appservice.ephemeral_events"]:
             self._registration["de.sorunome.msc2409.push_ephemeral"] = True
-            self._registration["push_ephemeral"] = True
+            self._registration["receive_ephemeral"] = True
+
+        if self["bridge.encryption.msc4190"]:
+            self._registration["io.element.msc4190"] = True

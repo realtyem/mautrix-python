@@ -275,7 +275,7 @@ class HTTPAPI:
         self,
         method: Method,
         url: URL,
-        content: str | bytes | bytearray | AsyncBody,
+        content: str | bytes | bytearray | AsyncBody | None,
         orig_content,
         query_params: dict[str, str],
         headers: dict[str, str],
@@ -314,7 +314,7 @@ class HTTPAPI:
         )
 
     def _log_request_done(
-        self, path: PathBuilder, req_id: int, duration: float, status: int
+        self, path: PathBuilder | str, req_id: int, duration: float, status: int
     ) -> None:
         level = 5 if path == Path.v3.sync else 10
         duration_str = f"{duration * 1000:.1f}ms" if duration < 1 else f"{duration:.3f}s"
@@ -333,6 +333,16 @@ class HTTPAPI:
         if base_path[-1] != "/":
             base_path += "/"
         return urllib_join(base_path, path)
+
+    def log_download_request(self, url: URL, query_params: dict[str, str]) -> int:
+        req_id = _next_global_req_id()
+        self._log_request(Method.GET, url, None, None, query_params, {}, req_id, False)
+        return req_id
+
+    def log_download_request_done(
+        self, url: URL, req_id: int, duration: float, status: int
+    ) -> None:
+        self._log_request_done(url.path.removeprefix("/_matrix/media/"), req_id, duration, status)
 
     async def request(
         self,
@@ -452,6 +462,7 @@ class HTTPAPI:
         mxc_uri: str,
         download_type: Literal["download", "thumbnail"] = "download",
         file_name: str | None = None,
+        authenticated: bool = False,
     ) -> URL:
         """
         Get the full HTTP URL to download a ``mxc://`` URI.
@@ -460,6 +471,7 @@ class HTTPAPI:
             mxc_uri: The MXC URI whose full URL to get.
             download_type: The type of download ("download" or "thumbnail").
             file_name: Optionally, a file name to include in the download URL.
+            authenticated: Whether to use the new authenticated download endpoint in Matrix v1.11.
 
         Returns:
             The full HTTP URL.
@@ -475,7 +487,11 @@ class HTTPAPI:
             "https://matrix-client.matrix.org/_matrix/media/v3/download/matrix.org/pqjkOuKZ1ZKRULWXgz2IVZV6/hello.png"
         """
         server_name, media_id = self.parse_mxc_uri(mxc_uri)
-        url = self.base_url / str(APIPath.MEDIA) / "v3" / download_type / server_name / media_id
+        if authenticated:
+            url = self.base_url / str(APIPath.CLIENT) / "v1" / "media"
+        else:
+            url = self.base_url / str(APIPath.MEDIA) / "v3"
+        url = url / download_type / server_name / media_id
         if file_name:
             url /= file_name
         return url
